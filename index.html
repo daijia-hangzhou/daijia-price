@@ -9,12 +9,17 @@
     input, button { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; font-size: 16px; }
     #result { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; display: none; }
     .price { font-size: 28px; color: #e4393c; font-weight: bold; }
+    .return-fee { font-size: 20px; color: #ff6600; font-weight: bold; }
     button { background: #ff6600; color: white; border: none; border-radius: 6px; }
+    label { font-weight: bold; display: block; margin-top: 10px; }
+    .fee-detail { margin: 10px 0; padding: 10px; background: #fff3e0; border-radius: 6px; }
   </style>
 </head>
 <body>
   <h2>🚗 代驾费用预估</h2>
-  <p>起点：<strong id="startText">正在定位...</strong></p>
+  <label>起点：</label>
+  <input type="text" id="startInput" placeholder="请输入起点（如：杭州西湖）">
+  <label>终点：</label>
   <input type="text" id="endInput" placeholder="请输入目的地（如：杭州东站）">
   <button onclick="calculate()">查看价格</button>
   <div id="result">
@@ -22,6 +27,15 @@
     <p>预估距离：<span id="distance"></span> 公里</p>
     <p>预估费用：<span class="price" id="price"></span> 元</p>
     <p style="font-size:13px;color:#555;" id="ruleDetail"></p>
+
+    <!-- 返程费一览模块 -->
+    <div class="fee-detail">
+      <p style="margin:0 0 8px 0; font-weight:bold;">🔁 返程费一览</p>
+      <p style="margin:0; font-size:14px;">免费返程距离：<span id="freeReturnKm">15</span> 公里</p>
+      <p style="margin:5px 0; font-size:14px;">超出后返程费：<span id="returnPerKm">2</span> 元/公里</p>
+      <p style="margin:5px 0 0 0;">本次预估返程费：<span class="return-fee" id="returnFee">0</span> 元</p>
+    </div>
+
     <p style="font-size:12px;color:#999;">
       🕒 司机到达后免费等候10分钟，超出后1元/分钟<br>
       （具体费用以实际服务为准）
@@ -29,38 +43,18 @@
   </div>
 
   <script>
-    // ！！！重要：把下面这一对单引号里的文字换成你之前保存的 Key
-    const GAODE_KEY = '085f7b2675d9a561c67365c42bb063ac';
+    // ========== 重要：替换成你的高德Key（两处都要改）==========
+    const GAODE_KEY = '	085f7b2675d9a561c67365c42bb063ac';
   </script>
-  <script src="https://webapi.amap.com/maps?v=2.0&key=085f7b2675d9a561c67365c42bb063ac&plugin=AMap.Geolocation,AMap.Driving,AMap.AutoComplete"></script>
+  <script src="https://webapi.amap.com/maps?v=2.0&key=	085f7b2675d9a561c67365c42bb063ac&plugin=AMap.Geocoder,AMap.Driving,AMap.AutoComplete"></script>
   <script>
-    let startLngLat = null;
-    const startText = document.getElementById('startText');
-
-    // 自动定位
-    AMap.plugin('AMap.Geolocation', () => {
-      const geolocation = new AMap.Geolocation({ enableHighAccuracy: true, timeout: 10000 });
-      geolocation.getCurrentPosition((status, result) => {
-        if (status === 'complete' && result.position) {
-          startLngLat = [result.position.lng, result.position.lat];
-          const geocoder = new AMap.Geocoder();
-          geocoder.getAddress(startLngLat, (geoStatus, geoResult) => {
-            startText.innerText = geoStatus === 'complete' ? geoResult.regeocode.formattedAddress : '定位成功（地址解析失败）';
-          });
-       } else {
-  startText.innerText = '定位失败,请刷新重试或手动输入起点';
-  console.log('定位错误: ', result); 
-}
-      });
-    });
-
-    // 时段判断
+    // 判断时段
     function getTimePeriod() {
       const hour = new Date().getHours();
       return (hour >= 22 || hour < 6) ? 'night' : 'day';
     }
 
-    // 计费规则
+    // 代驾基础计费
     function calcPrice(km) {
       const period = getTimePeriod();
       const baseKm = 8;
@@ -78,33 +72,54 @@
       };
     }
 
+    // 返程费计算（可根据实际情况修改参数）
+    function calcReturnFee(km) {
+      const freeKm = 15;        // 免费返程距离（公里）
+      const perKmFee = 2;       // 超出后每公里返程费（元）
+      if (km <= freeKm) return 0;
+      return Math.ceil((km - freeKm) * perKmFee);
+    }
+
+    // 主计算函数
     function calculate() {
+      const startAddr = document.getElementById('startInput').value.trim();
       const endAddr = document.getElementById('endInput').value.trim();
+      if (!startAddr) return alert('请输入起点');
       if (!endAddr) return alert('请输入目的地');
-      if (!startLngLat) return alert('尚未获得起点位置，请刷新后允许定位');
 
       const geocoder = new AMap.Geocoder();
-      geocoder.getLocation(endAddr, (status, result) => {
-        if (status === 'complete' && result.geocodes.length) {
-          const endPos = result.geocodes[0].location;
+      
+      geocoder.getLocation(startAddr, (startStatus, startResult) => {
+        if (startStatus !== 'complete' || !startResult.geocodes.length) {
+          return alert('起点地址未找到，请检查后重新输入');
+        }
+        const startPos = startResult.geocodes[0].location;
+
+        geocoder.getLocation(endAddr, (endStatus, endResult) => {
+          if (endStatus !== 'complete' || !endResult.geocodes.length) {
+            return alert('目的地未找到，请检查后重新输入');
+          }
+          const endPos = endResult.geocodes[0].location;
+
           const driving = new AMap.Driving({ map: null });
-          driving.search(startLngLat, endPos, (driveStatus, driveResult) => {
+          driving.search(startPos, endPos, (driveStatus, driveResult) => {
             if (driveStatus === 'complete' && driveResult.routes.length) {
               const distance = (driveResult.routes[0].distance / 1000).toFixed(1);
               const priceResult = calcPrice(distance);
+              const returnFee = calcReturnFee(distance);
+              
               document.getElementById('distance').innerText = distance;
               document.getElementById('price').innerText = priceResult.price;
               document.getElementById('periodTag').innerText = priceResult.periodDesc;
               document.getElementById('ruleDetail').innerText = 
                 `起步价：${priceResult.baseInfo}，${priceResult.extraInfo}`;
+              document.getElementById('returnFee').innerText = returnFee;
               document.getElementById('result').style.display = 'block';
             } else {
-              alert('路线规划失败，请检查目的地');
+              alert('路线计算失败，请检查地址是否有误');
             }
           });
-        } else {
-          alert('未找到目的地，请重新输入');
-        }
+        });
       });
     }
   </script>
