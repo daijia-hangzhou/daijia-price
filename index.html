@@ -15,7 +15,7 @@
 <body>
   <h2>🚗 代驾费用预估</h2>
   <p>起点：<strong id="startText">正在定位...</strong></p>
-  <input type="text" id="endInput" placeholder="请输入目的地（如：杭州西站）">
+  <input type="text" id="endInput" placeholder="请输入目的地（如：杭州东站）">
   <button onclick="calculate()">查看价格</button>
   <div id="result">
     <p>当前时段：<strong id="periodTag" style="color:#ff6600;"></strong></p>
@@ -47,9 +47,10 @@
           geocoder.getAddress(startLngLat, (geoStatus, geoResult) => {
             startText.innerText = geoStatus === 'complete' ? geoResult.regeocode.formattedAddress : '定位成功（地址解析失败）';
           });
-        } else {
-          startText.innerText = '定位失败，请刷新重试或手动输入起点';
-        }
+       } else {
+  startText.innerText = '定位失败,请刷新重试或手动输入起点';
+  console.log('定位错误: ', result); 
+}
       });
     });
 
